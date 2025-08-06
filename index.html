@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Harassment Detection</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="container">
+  <h2>Harassment Detection Using Gemma 3n</h2>
+
+  <form id="gemmaForm">
+    <button type="button" onclick="startVoiceInput()">🎤 Speak</button><br><br>
+
+    <input type="text" id="voiceInput" name="voice_text" placeholder="User Voice Input" required><br><br>
+
+    <label for="stress">Select Stress Level:</label><br>
+    <select name="stress" id="stress" required>
+      <option value="">--Select--</option>
+      <option value="30">Low</option>
+      <option value="50">Medium</option>
+      <option value="75">High</option>
+    </select><br><br>
+
+    <button type="submit">Detect Harassment</button>
+  </form>
+
+  <div id="gemmaResult" style="
+    margin-top: 30px;
+    padding: 20px;
+    border: 2px solid #4CAF50;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #333;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    display: none;
+  ">
+    <!-- Result will be inserted here -->
+  </div>
+</div>
+
+<script>
+  function startVoiceInput() {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
+
+    recognition.onresult = function(event) {
+      const transcript = event.results[0][0].transcript;
+      document.getElementById("voiceInput").value = transcript;
+    };
+  }
+
+  document.getElementById('gemmaForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const voice_text = document.getElementById("voiceInput").value;
+    const stress = document.getElementById("stress").value;
+
+    // Step 1: Get HR, temp, EDA, etc. from backend
+    const predictRes = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stress_level: stress })
+    });
+    const generated = await predictRes.json();
+
+    // Step 2: Send all data to Gemma
+    const gemmaRes = await fetch('/gemma-detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voice_text: voice_text,
+        heart_rate: generated.heart_rate,
+        stress: stress,
+        skin_temp: generated.skin_temp,
+        eda: generated.eda
+      })
+    });
+
+    const gemmaOutput = await gemmaRes.json();
+
+    // Step 3: Display results nicely
+    document.getElementById('gemmaResult').style.display = 'block';
+    document.getElementById('gemmaResult').innerHTML = `
+      <h3 style="color: #4CAF50; font-size: 22px;">Harassment Detection Result</h3>
+
+      <p><strong>🎤 Voice Input:</strong> <em>"${voice_text}"</em></p>
+      <p><strong>❤️ Heart Rate:</strong> ${generated.heart_rate} bpm</p>
+      <p><strong>📈 Stress Level:</strong> ${stress}</p>
+      <p><strong>🌡️ Skin Temperature:</strong> ${generated.skin_temp} °C</p>
+      <p><strong>💧 EDA:</strong> ${generated.eda}</p>
+
+      <p style="margin-top: 13px; font-size: 16px;"><strong>💡 Analysis:</strong><br>
+        <roman style="color: green; font-weight: not bold;">${gemmaOutput.gemma_prediction}</span>
+      </p>
+    `;
+  });
+</script>
+
+</body>
+</html>
